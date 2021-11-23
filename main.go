@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-flac/flacpicture"
@@ -22,6 +23,8 @@ import (
 
 	"github.com/bogem/id3v2"
 )
+
+var gw = &sync.WaitGroup{}
 
 //
 var (
@@ -543,6 +546,63 @@ func help() {
 	fmt.Println("=== Coded by CRMMC, KGDsave Software Studio ===")
 }
 
+func AddTasks(filename string) {
+	gw.Add(1)
+	time.Sleep(250)
+	nfext := filepath.Ext(filename)
+	if nfext == ".ncm" {
+		if DecodeNCM(filename) {
+			log.Printf("Success Decode %s: %s\n", nfext, filename)
+		}
+		//Netease NCM
+	} else if nfext == ".qmc2" || nfext == ".qmc4" || nfext == ".qmc6" || nfext == ".qmc8" || nfext == ".tkm" || nfext == ".6d3461" {
+		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".m4a", -1)) {
+			log.Printf("Success Decode %s: %s\n", nfext, filename)
+		}
+		//M4A
+	} else if nfext == ".qmc0" || nfext == ".qmc3" || nfext == ".bkcmp3" || nfext == ".6d7033" {
+		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".mp3", -1)) {
+			log.Printf("Success Decode %s: %s\n", nfext, filename)
+		}
+		//MP3
+	} else if nfext == ".qmcflac" || nfext == ".bkcflac" || nfext == ".666c6163" {
+		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
+			log.Printf("Success Decode %s: %s\n", nfext, filename)
+		}
+		//FLAC
+	} else if nfext == ".qmcogg" || nfext == ".6f6767" {
+		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
+			log.Printf("Success Decode %s: %s\n", nfext, filename)
+		}
+
+		//OGG
+	} else if nfext == ".776176" {
+		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".wav", -1)) {
+			log.Printf("Success Decode %s: %s\n", nfext, filename)
+		}
+		//WAV
+	} else if nfext == ".mgg" {
+		log.Printf("To File: [%s]", filename)
+		fmt.Println("\tDo not support .mgg format, but you can try this one:")
+		fmt.Println("\thttps://github.com/unlock-music/unlock-music/")
+		fmt.Println("\t	the program provide an unstable convent method!")
+		// if DecodeQQMUSICMGG(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
+		//	log.Printf("Success Decode %s: %s\n", nfext, filename)
+		// }
+		//NEW QQ OGG
+	} else if nfext == ".mflac" {
+		if DecodeQQMUSICMFLAC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
+			log.Printf("Success Decode %s: %s\n", nfext, filename)
+		} else {
+			log.Printf("[%s] decode failed! Please try to downgrade your qq music client and redownload this song \n", filename)
+		}
+		//NEW QQ FLAC
+	} else {
+		log.Printf("Convent Failed :[%s]\n", filename)
+	}
+	gw.Add(-1)
+}
+
 func main() {
 	argc := len(os.Args)
 	if argc <= 1 {
@@ -569,57 +629,7 @@ func main() {
 	}
 
 	for _, filename := range files {
-		nfext := filepath.Ext(filename)
-		if nfext == ".ncm" {
-			if DecodeNCM(filename) {
-				log.Printf("Success Decode %s: %s\n", nfext, filename)
-			}
-			//Netease NCM
-		} else if nfext == ".qmc2" || nfext == ".qmc4" || nfext == ".qmc6" || nfext == ".qmc8" || nfext == ".tkm" || nfext == ".6d3461" {
-			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".m4a", -1)) {
-				log.Printf("Success Decode %s: %s\n", nfext, filename)
-			}
-			//M4A
-		} else if nfext == ".qmc0" || nfext == ".qmc3" || nfext == ".bkcmp3" || nfext == ".6d7033" {
-			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".mp3", -1)) {
-				log.Printf("Success Decode %s: %s\n", nfext, filename)
-			}
-			//MP3
-		} else if nfext == ".qmcflac" || nfext == ".bkcflac" || nfext == ".666c6163" {
-			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
-				log.Printf("Success Decode %s: %s\n", nfext, filename)
-			}
-			//FLAC
-		} else if nfext == ".qmcogg" || nfext == ".6f6767" {
-			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
-				log.Printf("Success Decode %s: %s\n", nfext, filename)
-			}
-
-			//OGG
-		} else if nfext == ".776176" {
-			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".wav", -1)) {
-				log.Printf("Success Decode %s: %s\n", nfext, filename)
-			}
-			//WAV
-		} else if nfext == ".mgg" {
-			log.Printf("To File: [%s]", filename)
-			fmt.Println("Do not support .mgg format, but you can try this one:")
-			fmt.Println("https://github.com/unlock-music/unlock-music/")
-			fmt.Println("the program provide an unstable convent method!")
-			// if DecodeQQMUSICMGG(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
-			//	log.Printf("Success Decode %s: %s\n", nfext, filename)
-			// }
-			//NEW QQ OGG
-		} else if nfext == ".mflac" {
-			if DecodeQQMUSICMFLAC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
-				log.Printf("Success Decode %s: %s\n", nfext, filename)
-			} else {
-				log.Printf(".mflac decode failed! Please try to downgrade your qq music client and redownload this song [%s]\n", filename)
-			}
-			//NEW QQ FLAC
-		} else {
-			log.Printf("Convent Failed :[%s]\n", filename)
-		}
+		AddTasks(filename)
 	}
-
+	gw.Wait()
 }
