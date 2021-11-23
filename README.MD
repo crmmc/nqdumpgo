@@ -48,7 +48,10 @@ _一个使用 Go 语言编写的用于解密被网易云音乐或 QQ 音乐加�
 ** Porject Used code from other github projects **  
 ** 本项目使用了来自其他 Github 项目的部分代码,十分感谢代码作者的无私开源,让我不用重复造轮子 **  
 https://github.com/lucifer9/qmcdump-go
+
 https://github.com/ljm12914/ncmdump
+
+https://github.com/unlock-music/unlock-music
 
 ---
 

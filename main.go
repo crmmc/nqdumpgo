@@ -422,15 +422,23 @@ func addMP3Tag(fileName string, imgData []byte, meta *MetaInfo) {
 	}
 }
 
-func mapL(v int, key []byte) byte {
-	if v >= 0 {
-		if v > 0x7FFF {
-			v %= 0x7FFF
+func decodedata(inbuf []byte, lenbuf int, keymap []byte) []byte {
+	dst := make([]byte, lenbuf)
+	index := -1
+	maskIdx := -1
+	for cur := 0; cur < lenbuf; cur++ {
+		index++
+		maskIdx++
+		if index == 0x8000 || (index > 0x8000 && (index+1)%0x8000 == 0) {
+			index++
+			maskIdx++
 		}
-	} else {
-		v = 0
+		if maskIdx >= 128 {
+			maskIdx -= 128
+		}
+		dst[cur] = inbuf[cur] ^ keymap[maskIdx]
 	}
-	return key[(v*v+80923)%256]
+	return dst
 }
 
 func DecodeQQMUSIC(infile string, outfile string) bool {
@@ -472,39 +480,13 @@ func DecodeQQMUSIC(infile string, outfile string) bool {
 	stat, _ := fin.Stat()
 	buf := make([]byte, stat.Size())
 	fin.Read(buf)
-	offset := 0
-	len := len(buf)
-	if offset < 0 {
-		return false
-	}
-	for i := 0; i < len; i++ {
-		buf[i] ^= mapL(offset+i, nkey)
-	}
-	fout.Write(buf)
+	outbuf := decodedata(buf, len(buf), nkey)
+	fout.Write(outbuf)
 	return true
 }
 
 //NEW QQ MUSIC DECODE MODULE
 //START
-
-func decodedata(inbuf []byte, lenbuf int, keymap []byte) []byte {
-	dst := make([]byte, lenbuf)
-	index := -1
-	maskIdx := -1
-	for cur := 0; cur < lenbuf; cur++ {
-		index++
-		maskIdx++
-		if index == 0x8000 || (index > 0x8000 && (index+1)%0x8000 == 0) {
-			index++
-			maskIdx++
-		}
-		if maskIdx >= 128 {
-			maskIdx -= 128
-		}
-		dst[cur] = inbuf[cur] ^ keymap[maskIdx]
-	}
-	return dst
-}
 
 func DecodeQQMUSICMFLAC(infile string, outfile string) bool {
 	fin, err := os.Open(infile)
@@ -551,13 +533,14 @@ func DecodeQQMUSICMFLAC(infile string, outfile string) bool {
 //END
 
 func help() {
-	fmt.Println("nqdump go version V1.0 ")
+	fmt.Println("nqdump go version V1.2 ")
 	fmt.Println("A tool to decode cryptoed netease music files and qqmusic files")
 	fmt.Println("Using Buildin Thread Pooling in Go Programming")
-	fmt.Println("Support Formats: [ncm](netease) and [qmcflac/qmc0/qmc3](qqmusic)")
-	fmt.Println("\tUsage:")
+	fmt.Println("stable Support Formats: [ncm](netease) and [qmc(flac/mp3/ogg)/qmc(0-8)/tkm/bkcmp3/bkflac/]\n(tencent music) or [666c6163/6f6767/6d7033/6d3461](tencent weiyun)")
+	fmt.Println("Unstable Support Formats: [mflac](new qqmusic)")
+	fmt.Println("Usage:")
 	fmt.Println("\tnqdumpgo [file1] [file2] [...]")
-	fmt.Println("Coded by CRMMC, KGDsave Software Studio")
+	fmt.Println("=== Coded by CRMMC, KGDsave Software Studio ===")
 }
 
 func main() {
@@ -591,7 +574,7 @@ func main() {
 			if DecodeNCM(filename) {
 				log.Printf("Success Decode %s: %s\n", nfext, filename)
 			}
-			//NETEASE NCM
+			//Netease NCM
 		} else if nfext == ".qmc2" || nfext == ".qmc4" || nfext == ".qmc6" || nfext == ".qmc8" || nfext == ".tkm" || nfext == ".6d3461" {
 			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".m4a", -1)) {
 				log.Printf("Success Decode %s: %s\n", nfext, filename)
@@ -619,6 +602,10 @@ func main() {
 			}
 			//WAV
 		} else if nfext == ".mgg" {
+			log.Printf("To File: [%s]", filename)
+			fmt.Println("Do not support .mgg format, but you can try this one:")
+			fmt.Println("https://github.com/unlock-music/unlock-music/")
+			fmt.Println("the program provide an unstable convent method!")
 			// if DecodeQQMUSICMGG(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
 			//	log.Printf("Success Decode %s: %s\n", nfext, filename)
 			// }
@@ -626,10 +613,12 @@ func main() {
 		} else if nfext == ".mflac" {
 			if DecodeQQMUSICMFLAC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
 				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			} else {
+				log.Printf(".mflac decode failed! Please try to downgrade your qq music client and redownload this song [%s]\n", filename)
 			}
 			//NEW QQ FLAC
 		} else {
-			log.Printf("Skipping %s: not cryptoed file found!\n", filename)
+			log.Printf("Convent Failed :[%s]\n", filename)
 		}
 	}
 
