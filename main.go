@@ -389,14 +389,14 @@ func addMP3Tag(fileName string, imgData []byte, meta *MetaInfo) {
 
 	if tag.GetTextFrame("TIT2").Text == "" {
 		if meta.MusicName != "" {
-			log.Println("Adding music name")
+			//log.Println("Adding music name")
 			tag.AddTextFrame("TIT2", id3v2.EncodingUTF8, meta.MusicName)
 		}
 	}
 
 	if tag.GetTextFrame("TALB").Text == "" {
 		if meta.Album != "" {
-			log.Println("Adding album name")
+			//log.Println("Adding album name")
 			tag.AddTextFrame("TALB", id3v2.EncodingUTF8, meta.Album)
 		}
 	}
@@ -412,11 +412,8 @@ func addMP3Tag(fileName string, imgData []byte, meta *MetaInfo) {
 			}
 			return res
 		}()
-		if artist != nil {
-			log.Println("Adding artist")
-			for _, name := range artist {
-				tag.AddTextFrame("TPE1", id3v2.EncodingUTF8, name)
-			}
+		for _, name := range artist {
+			tag.AddTextFrame("TPE1", id3v2.EncodingUTF8, name)
 		}
 	}
 
@@ -425,18 +422,19 @@ func addMP3Tag(fileName string, imgData []byte, meta *MetaInfo) {
 	}
 }
 
-func encrypt(offset int, buf []byte, len int) int {
-	if offset < 0 {
-		return -1
+func mapL(v int, key []byte) byte {
+	if v >= 0 {
+		if v > 0x7FFF {
+			v %= 0x7FFF
+		}
+	} else {
+		v = 0
 	}
-	for i := 0; i < len; i++ {
-		buf[i] ^= mapL(offset + i)
-	}
-	return 0
+	return key[(v*v+80923)%256]
 }
 
-func mapL(v int) byte {
-	key := []byte{
+func DecodeQQMUSIC(infile string, outfile string) bool {
+	nkey := []byte{
 		0x77, 0x48, 0x32, 0x73, 0xDE, 0xF2, 0xC0, 0xC8, 0x95, 0xEC, 0x30, 0xB2,
 		0x51, 0xC3, 0xE1, 0xA0, 0x9E, 0xE6, 0x9D, 0xCF, 0xFA, 0x7F, 0x14, 0xD1,
 		0xCE, 0xB8, 0xDC, 0xC3, 0x4A, 0x67, 0x93, 0xD6, 0x28, 0xC2, 0x91, 0x70,
@@ -459,17 +457,6 @@ func mapL(v int) byte {
 		0x3D, 0x1A, 0xFE, 0x20, 0x77, 0xE4, 0xD9, 0xDA, 0xF9, 0xA4, 0x2B, 0x76,
 		0x1C, 0x71, 0xDB, 0x00, 0xBC, 0xFD, 0xC, 0x6C, 0xA5, 0x47, 0xF7, 0xF6,
 		0x00, 0x79, 0x4A, 0x11}
-	if v >= 0 {
-		if v > 0x7FFF {
-			v %= 0x7FFF
-		}
-	} else {
-		v = 0
-	}
-	return key[(v*v+80923)%256]
-}
-
-func DecodeQQMUSIC(infile string, outfile string) bool {
 	fin, err := os.Open(infile)
 	if err != nil {
 		log.Fatal("cannot open file: " + infile)
@@ -482,21 +469,94 @@ func DecodeQQMUSIC(infile string, outfile string) bool {
 	}
 	defer fin.Close()
 	defer fout.Close()
-
 	stat, _ := fin.Stat()
 	buf := make([]byte, stat.Size())
 	fin.Read(buf)
-	encrypt(0, buf, len(buf))
+	offset := 0
+	len := len(buf)
+	if offset < 0 {
+		return false
+	}
+	for i := 0; i < len; i++ {
+		buf[i] ^= mapL(offset+i, nkey)
+	}
 	fout.Write(buf)
 	return true
 }
 
+//NEW QQ MUSIC DECODE MODULE
+//START
+
+func decodedata(inbuf []byte, lenbuf int, keymap []byte) []byte {
+	dst := make([]byte, lenbuf)
+	index := -1
+	maskIdx := -1
+	for cur := 0; cur < lenbuf; cur++ {
+		index++
+		maskIdx++
+		if index == 0x8000 || (index > 0x8000 && (index+1)%0x8000 == 0) {
+			index++
+			maskIdx++
+		}
+		if maskIdx >= 128 {
+			maskIdx -= 128
+		}
+		dst[cur] = inbuf[cur] ^ keymap[maskIdx]
+	}
+	return dst
+}
+
+func DecodeQQMUSICMFLAC(infile string, outfile string) bool {
+	fin, err := os.Open(infile)
+	if err != nil {
+		log.Fatal("cannot open file: " + infile)
+		return false
+	}
+	fout, err := os.Create(outfile)
+	if err != nil {
+		log.Fatal("cannot create new file: " + outfile)
+		return false
+	}
+	defer fin.Close()
+	defer fout.Close()
+	stat, _ := fin.Stat()
+	buf := make([]byte, stat.Size())
+	fin.Read(buf)
+	var nkey []byte
+	lenData := len(buf)
+	lenTest := 0x8000
+	if lenData < 0x8000 {
+		lenTest = lenData
+	}
+	for blockIdx := 0; blockIdx < lenTest; blockIdx += 128 {
+		// fmt.Println(blockIdx, lenData)
+		if bytes.HasPrefix(buf[blockIdx:blockIdx+128], buf[blockIdx+128:blockIdx+256]) {
+			nkey = buf[blockIdx : blockIdx+128]
+			if bytes.HasPrefix(decodedata(buf[:4], 4, nkey), []byte("fLaC")) {
+				//fmt.Println("KEY FOUND!")
+				break
+			}
+		} else {
+			if blockIdx > 30000 {
+				// log.Printf("Skipping %s: cannot decode special mflac file!\n", infile)
+				return false
+			}
+			continue
+		}
+	}
+	fout.Write(decodedata(buf[:lenData-368], len(buf)-368, nkey))
+	return true
+}
+
+//END
+
 func help() {
 	fmt.Println("nqdump go version V1.0 ")
 	fmt.Println("A tool to decode cryptoed netease music files and qqmusic files")
+	fmt.Println("Using Buildin Thread Pooling in Go Programming")
 	fmt.Println("Support Formats: [ncm](netease) and [qmcflac/qmc0/qmc3](qqmusic)")
 	fmt.Println("\tUsage:")
-	fmt.Println("nqdumpgo [file1] [file2] [...]")
+	fmt.Println("\tnqdumpgo [file1] [file2] [...]")
 	fmt.Println("Coded by CRMMC, KGDsave Software Studio")
 }
 
@@ -511,7 +571,7 @@ func main() {
 	for i := 0; i < argc-1; i++ {
 		path := os.Args[i+1]
 		if info, err := os.Stat(path); err != nil {
-			log.Fatalf("Path %s does not exist.", info)
+			log.Fatalf("Path does not exist.")
 		} else if info.IsDir() {
 			filelist, err := ioutil.ReadDir(path)
 			if err != nil {
@@ -526,15 +586,48 @@ func main() {
 	}
 
 	for _, filename := range files {
-		if filepath.Ext(filename) == ".ncm" {
-			log.Printf("NOW: %s: Decoding...\n", filename)
-			DecodeNCM(filename)
-		} else if filepath.Ext(filename) == ".qmc0" || filepath.Ext(filename) == ".qmc3" {
-			log.Printf("NOW: %s: Decoding...\n", filename)
-			DecodeQQMUSIC(filename, strings.Replace(strings.Replace(filename, ".qmc0", ".mp3", -1), ".qmc3", ".mp3", -1))
-		} else if filepath.Ext(filename) == ".qmcflac" || filepath.Ext(filename) == ".mflac" {
-			log.Printf("NOW: %s: Decoding...\n", filename)
-			DecodeQQMUSIC(filename, strings.Replace(strings.Replace(filename, ".qmcflac", ".flac", -1), ".mflac", ".flac", -1))
+		nfext := filepath.Ext(filename)
+		if nfext == ".ncm" {
+			if DecodeNCM(filename) {
+				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			}
+			//NETEASE NCM
+		} else if nfext == ".qmc2" || nfext == ".qmc4" || nfext == ".qmc6" || nfext == ".qmc8" || nfext == ".tkm" || nfext == ".6d3461" {
+			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".m4a", -1)) {
+				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			}
+			//M4A
+		} else if nfext == ".qmc0" || nfext == ".qmc3" || nfext == ".bkcmp3" || nfext == ".6d7033" {
+			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".mp3", -1)) {
+				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			}
+			//MP3
+		} else if nfext == ".qmcflac" || nfext == ".bkcflac" || nfext == ".666c6163" {
+			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
+				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			}
+			//FLAC
+		} else if nfext == ".qmcogg" || nfext == ".6f6767" {
+			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
+				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			}
+
+			//OGG
+		} else if nfext == ".776176" {
+			if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".wav", -1)) {
+				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			}
+			//WAV
+		} else if nfext == ".mgg" {
+			// if DecodeQQMUSICMGG(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
+			//	log.Printf("Success Decode %s: %s\n", nfext, filename)
+			// }
+			//NEW QQ OGG
+		} else if nfext == ".mflac" {
+			if DecodeQQMUSICMFLAC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
+				log.Printf("Success Decode %s: %s\n", nfext, filename)
+			}
+			//NEW QQ FLAC
 		} else {
 			log.Printf("Skipping %s: not cryptoed file found!\n", filename)
 		}

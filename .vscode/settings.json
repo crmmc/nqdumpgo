@@ -1,0 +1,17 @@
+{
+    "go.buildOnSave": "workspace",
+    "go.lintOnSave": "package",
+    "go.vetOnSave": "package",
+    "go.buildTags": "",
+    "go.buildFlags": [],
+    "go.lintFlags": [],
+    "go.vetFlags": [],
+    "go.coverOnSave":true,
+    "go.useCodeSnippetsOnFunctionSuggest": true,
+    "go.gocodeAutoBuild": true,
+    "go.gocodePackageLookupMode": "go",
+    "go.autocompleteUnimportedPackages": true,
+    "go.gotoSymbol.includeImports": true,
+    "go.inferGopath": false,
+    "files.autoSave": "onFocusChange",
+}
