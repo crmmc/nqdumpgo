@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +25,10 @@ import (
 	"github.com/bogem/id3v2"
 )
 
-var gw = &sync.WaitGroup{}
+var gw = sync.WaitGroup{}
+var maintasklist = make(chan string, 1)
+var allfailed []string
+var allfailedml = sync.Mutex{}
 
 //
 var (
@@ -536,74 +540,66 @@ func DecodeQQMUSICMFLAC(infile string, outfile string) bool {
 //END
 
 func help() {
-	fmt.Println("nqdump go version V1.2 ")
-	fmt.Println("A tool to decode cryptoed netease music files and qqmusic files")
-	fmt.Println("Using Buildin Thread Pooling in Go Programming")
-	fmt.Println("stable Support Formats: [ncm](netease) and [qmc(flac/mp3/ogg)/qmc(0-8)/tkm/bkcmp3/bkflac/]\n(tencent music) or [666c6163/6f6767/6d7033/6d3461](tencent weiyun)")
-	fmt.Println("Unstable Support Formats: [mflac](new qqmusic)")
 	fmt.Println("Usage:")
 	fmt.Println("\tnqdumpgo [file1] [file2] [...]")
-	fmt.Println("=== Coded by CRMMC, KGDsave Software Studio ===")
+	fmt.Println("\tnqdumpgo [filepath]")
 }
 
-func AddTasks(filename string) {
-	gw.Add(1)
-	time.Sleep(250)
+func subthread() {
+	for {
+		filename := <-maintasklist
+		gw.Add(1)
+		if !RunningTasks(filename) {
+			allfailedml.Lock()
+			allfailed = append(allfailed, filename)
+			allfailedml.Unlock()
+		} else {
+			log.Printf("Success : [%s]\n", filename)
+		}
+		gw.Add(-1)
+	}
+}
+
+func RunningTasks(filename string) bool {
 	nfext := filepath.Ext(filename)
 	if nfext == ".ncm" {
-		if DecodeNCM(filename) {
-			log.Printf("Success Decode %s: %s\n", nfext, filename)
-		}
+		return DecodeNCM(filename)
 		//Netease NCM
+	} else if nfext == ".flac" || nfext == ".mp3" || nfext == ".m4a" || nfext == ".ogg" {
+		return true
+		//jump dumped files
 	} else if nfext == ".qmc2" || nfext == ".qmc4" || nfext == ".qmc6" || nfext == ".qmc8" || nfext == ".tkm" || nfext == ".6d3461" {
-		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".m4a", -1)) {
-			log.Printf("Success Decode %s: %s\n", nfext, filename)
-		}
+		return DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".m4a", -1))
 		//M4A
 	} else if nfext == ".qmc0" || nfext == ".qmc3" || nfext == ".bkcmp3" || nfext == ".6d7033" {
-		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".mp3", -1)) {
-			log.Printf("Success Decode %s: %s\n", nfext, filename)
-		}
+		return DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".mp3", -1))
 		//MP3
 	} else if nfext == ".qmcflac" || nfext == ".bkcflac" || nfext == ".666c6163" {
-		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
-			log.Printf("Success Decode %s: %s\n", nfext, filename)
-		}
+		return DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".flac", -1))
 		//FLAC
 	} else if nfext == ".qmcogg" || nfext == ".6f6767" {
-		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
-			log.Printf("Success Decode %s: %s\n", nfext, filename)
-		}
-
+		return DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".ogg", -1))
 		//OGG
 	} else if nfext == ".776176" {
-		if DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".wav", -1)) {
-			log.Printf("Success Decode %s: %s\n", nfext, filename)
-		}
+		return DecodeQQMUSIC(filename, strings.Replace(filename, nfext, ".wav", -1))
 		//WAV
-	} else if nfext == ".mgg" {
-		log.Printf("To File: [%s]", filename)
-		fmt.Println("\tDo not support .mgg format, but you can try this one:")
-		fmt.Println("\thttps://github.com/unlock-music/unlock-music/")
-		fmt.Println("\t	the program provide an unstable convent method!")
-		// if DecodeQQMUSICMGG(filename, strings.Replace(filename, nfext, ".ogg", -1)) {
-		//	log.Printf("Success Decode %s: %s\n", nfext, filename)
-		// }
-		//NEW QQ OGG
 	} else if nfext == ".mflac" {
-		if DecodeQQMUSICMFLAC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
-			log.Printf("Success Decode %s: %s\n", nfext, filename)
-		} else {
+		if !DecodeQQMUSICMFLAC(filename, strings.Replace(filename, nfext, ".flac", -1)) {
 			log.Printf("[%s] decode failed! Please try to downgrade your qq music client and redownload this song \n", filename)
 		}
+		return true
 		//NEW QQ FLAC
-	} else {
-		log.Printf("Convent Failed :[%s]\n", filename)
 	}
-	gw.Add(-1)
+	return false
 }
 
 func main() {
+	fmt.Println("=== nqdump go version V1.3 ===")
+	fmt.Println("A tool to decode cryptoed netease music files and qqmusic files")
+	fmt.Println("Using Buildin Thread Pooling in Go Programming")
+	fmt.Println("stable Support Formats: \n[ncm](Netease CloudMusic)\n[qmc(flac/mp3/ogg)/qmc(0-8)/tkm/bkcmp3/bkflac/](Tencent QQ Music)\n[666c6163/6f6767/6d7033/6d3461](Tencent Weiyun)")
+	fmt.Println("Unstable Support Formats: \n[mflac](new qqmusic)")
+	fmt.Println("=== Provide by CRMMC, KGDsave Software Studio ===")
 	argc := len(os.Args)
 	if argc <= 1 {
 		help()
@@ -618,7 +614,7 @@ func main() {
 		} else if info.IsDir() {
 			filelist, err := ioutil.ReadDir(path)
 			if err != nil {
-				log.Fatalf("Error while reading %s: %s", path, err.Error())
+				log.Fatalf("Error while reading %s: [%s]", path, err.Error())
 			}
 			for _, f := range filelist {
 				files = append(files, filepath.Join(path, "./", f.Name()))
@@ -627,9 +623,19 @@ func main() {
 			files = append(files, path)
 		}
 	}
-
-	for _, filename := range files {
-		AddTasks(filename)
+	log.Printf("==== MAIN: Loading %d SubThreads ====", runtime.NumCPU())
+	for threadid := 1; threadid < runtime.NumCPU(); threadid++ {
+		// log.Printf("SUB Thread %d start!", threadid)
+		go subthread()
 	}
+	for _, filename := range files {
+		maintasklist <- filename
+	}
+	//log.Printf("==== MAIN: All Tasks Loaded! ====")
 	gw.Wait()
+	log.Println("FAILED FILE LIST:")
+	for _, failsfilename := range allfailed {
+		log.Println(failsfilename)
+	}
+	log.Println("==== MAIN: ALL Tasks Done! ====")
 }
