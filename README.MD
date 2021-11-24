@@ -21,7 +21,9 @@ _一个使用 Go 语言编写的用于解密被网易云音乐或 QQ 音乐加�
 ###### 在编译之前需要下载第三方库
 > go get nqdumpgo
 ##### 一键编译
-> go build nqdumpgo
+> go build -ldflags="-w -s"
+> 这样是生成的文件比go build的小,功能不减,去掉了调试用的符号信息和调试信息
+> 可以使用 upx 进一步压缩可执行文件体积
 ##### 编译完成
 > 在Windows下生成的二进制文件为nqdumpgo.exe, 在Linux下生成的二进制文件为nqdumpgo
 ```
