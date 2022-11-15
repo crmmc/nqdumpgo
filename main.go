@@ -548,7 +548,6 @@ func help() {
 func subthread() {
 	for {
 		filename := <-maintasklist
-		gw.Add(1)
 		if !RunningTasks(filename) {
 			allfailedml.Lock()
 			allfailed = append(allfailed, filename)
@@ -629,6 +628,7 @@ func main() {
 		go subthread()
 	}
 	for _, filename := range files {
+		gw.Add(1)
 		maintasklist <- filename
 	}
 	//log.Printf("==== MAIN: All Tasks Loaded! ====")

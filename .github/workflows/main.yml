@@ -1,17 +1,17 @@
-name: hello
+name: nqdumpgo_build
 
 on:
   push:
     branches:
-    - main
-    - release/*
+      - main
+      - release/*
     tags:
-      - "v*.*.*"
+      - 'v*.*.*'
   workflow_dispatch:
 
 env:
   OUTPUT_NAME: nqdumpgo
-  MY_BUILD_CONFS: windows-amd64 darwin-amd64 darwin-arm64
+  MY_BUILD_CONFS: windows-amd64 darwin-amd64 darwin-arm64 android-arm64 linux-386 linux-amd64 linux-arm64
 
 jobs:
   build:
