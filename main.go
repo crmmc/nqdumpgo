@@ -201,8 +201,9 @@ func DecodeNCM(name string) bool {
 	checkError(err)
 
 	var tb = make([]byte, n)
+	offset := 0
 	for {
-		_, err := fp.Read(tb)
+		readBytes, err := fp.Read(tb)
 		if err == io.EOF { // read EOF
 			break
 		} else if err != nil {
@@ -210,11 +211,12 @@ func DecodeNCM(name string) bool {
 			fpOut.Close()
 			return false
 		}
-		for i := 0; i < n; i++ {
-			j := byte((i + 1) & 0xff)
+		for i := 0; i < readBytes; i++ {
+			offset += 1
+			j := byte(offset & 0xff)
 			tb[i] ^= box[(box[j]+box[(box[j]+j)&0xff])&0xff]
 		}
-		_, err = fpOut.Write(tb)
+		_, err = fpOut.Write(tb[:readBytes])
 		if err != nil {
 			log.Println(err)
 			fpOut.Close()
